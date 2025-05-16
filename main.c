@@ -2,27 +2,27 @@
 #include <stdlib.h>
 #include "utils.h"
 #include "lexer.h"
-#include "token.h"
-
+// #include "token.h"
+#include "syntactic.h"
 
 int line = 1;
 Token *tokens = NULL, *lastToken = NULL;
 const char *pCrtCh;
 char *input;
+Token *crtTk;
 
-
-
-
-
-int main(int argc, char **argv) {
-    if (argc != 2) {
+int main(int argc, char **argv)
+{
+    if (argc != 2)
+    {
         fprintf(stderr, "Usage: %s <source-file>\n", argv[0]);
         return 1;
     }
 
     // Open the file
     FILE *f = fopen(argv[1], "rb");
-    if (!f) {
+    if (!f)
+    {
         perror("Could not open file");
         return 1;
     }
@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
 
     // Read content into memory (+1 for '\0')
     input = (char *)malloc(fsize + 1);
-    if (!input) {
+    if (!input)
+    {
         fclose(f);
         err("not enough memory to read file");
     }
@@ -48,15 +49,32 @@ int main(int argc, char **argv) {
 
     // Tokenization loop
     if ((unsigned char)input[0] == 0xEF &&
-    (unsigned char)input[1] == 0xBB &&
-    (unsigned char)input[2] == 0xBF) {
-    pCrtCh += 3;
-}
-    while (getNextToken() != END);
-
+        (unsigned char)input[1] == 0xBB &&
+        (unsigned char)input[2] == 0xBF)
+    {
+        pCrtCh += 3;
+    }
+    while (getNextToken() != END)
+        ;
+    crtTk = tokens;
 
     // Print all tokens
     showTokens();
+    crtTk = tokens; // reset to first token again, if not already
+
+    if (unit())
+    {
+        printf("Syntax is valid.\n");
+    }
+    else
+    {
+        fprintf(stderr, "Syntax error.\n");
+    }
+
+    if (crtTk->code != END) 
+    {
+    tkerr(crtTk, "Syntax error: extra tokens at the end");
+    }
 
     // Free everything
     done();
