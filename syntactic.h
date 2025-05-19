@@ -1,7 +1,3 @@
-#include "token.h"
-
-extern Token *consumedTk;
-extern Token *crtTk;
 
 int consume(int code);
 

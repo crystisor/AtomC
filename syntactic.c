@@ -1,8 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "syntactic.h"
+#include "symbols.h"
 
-Token *crtTk = NULL;
+
+Symbol *crtStruct = NULL;  // Current struct being defined
+Symbol *crtFunc = NULL;    // Current function being defined
+extern int crtDepth;          // Current block nesting depth
+extern Token *crtTk;
 Token *consumedTk = NULL;
 
 int consume(int code)
@@ -33,26 +38,33 @@ int unit()
     return 1;
 }
 
-int declStruct()
-{
+int declStruct() {
     Token *startTk = crtTk;
-    if (!consume(STRUCT))
-    {
-        return 0;
-    }
-    if (!consume(ID))
-        tkerr(crtTk, "missing struct name");
-    if (!consume(LACC))
-        tkerr(crtTk, "missing { after struct name");
-    while (declVar())
-    { /* consume declVar zero or more times */
-    }
-    if (!consume(RACC))
-        tkerr(crtTk, "missing } after struct body");
-    if (!consume(SEMICOLON))
-        tkerr(crtTk, "missing ; after struct declaration");
+    if (!consume(STRUCT)) return 0;
+
+    if (!consume(ID)) tkerr(crtTk, "missing struct name");
+    Token *tkName = consumedTk;
+
+    if (!consume(LACC)) tkerr(crtTk, "missing { after struct name");
+
+    if (crtFunc || crtStruct)
+        tkerr(crtTk, "struct declared in non-global scope");
+
+    if (findSymbol(&symbols, tkName->text))
+        tkerr(crtTk, "symbol redefinition: %s", tkName->text);
+
+    crtStruct = addSymbol(&symbols, tkName->text, CLS_STRUCT);
+    initSymbols(&crtStruct->members);
+
+    while (declVar()) { }
+
+    if (!consume(RACC)) tkerr(crtTk, "missing } after struct body");
+    if (!consume(SEMICOLON)) tkerr(crtTk, "missing ; after struct declaration");
+
+    crtStruct = NULL;
     return 1;
 }
+
 
 int declVar()
 {

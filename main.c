@@ -2,14 +2,14 @@
 #include <stdlib.h>
 #include "utils.h"
 #include "lexer.h"
-// #include "token.h"
+#include "token.h"
 #include "syntactic.h"
 
 int line = 1;
 Token *tokens = NULL, *lastToken = NULL;
 const char *pCrtCh;
 char *input;
-Token *crtTk;
+Token *crtTk = NULL;
 
 int main(int argc, char **argv)
 {
