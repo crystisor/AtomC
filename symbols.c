@@ -9,18 +9,28 @@ Symbols symbols;
 int crtDepth = 0;
 
 void initSymbols(Symbols *symbols) {
-    symbols->begin = NULL;
-    symbols->end = NULL;
-    symbols->after = NULL;
-    printf("Initialized symbols\n");
+    const int initialCapacity = 4;
+    symbols->begin = (Symbol **)malloc(initialCapacity * sizeof(Symbol *));
+    if (!symbols->begin) err("not enough memory");
+
+    symbols->end = symbols->begin;
+    symbols->after = symbols->begin + initialCapacity;
 }
+
 
 Symbol *addSymbol(Symbols *symbols, const char *name, int cls) {
     // Redefinition check at the same depth
+    if (symbols->begin == NULL || symbols->end == NULL) {
+        printf("Warning: symbols list is empty or uninitialized\n");
+    }
     for (Symbol **p = symbols->end - 1; p >= symbols->begin; p--) {
-        if ((*p)->depth < crtDepth) break;
-        if (strcmp((*p)->name, name) == 0)
+        if ((*p)->depth < crtDepth) {
+                   (*p)->name, (*p)->depth, crtDepth;
+            break;
+        }
+        if (strcmp((*p)->name, name) == 0) {
             err("symbol redefinition: %s", name);
+        }
     }
 
     // Resize if needed
@@ -44,20 +54,36 @@ Symbol *addSymbol(Symbols *symbols, const char *name, int cls) {
     s->cls = cls;
     s->depth = crtDepth;
 
+
     // For functions/structs, init sub-symbols
-    if (cls == CLS_FUNC) initSymbols(&s->args);
-    else if (cls == CLS_STRUCT) initSymbols(&s->members);
+    if (cls == CLS_FUNC) {
+        initSymbols(&s->args);
+    }
+    else if (cls == CLS_STRUCT) {
+        initSymbols(&s->members);
+    }
 
     return s;
 }
 
+
 Symbol *findSymbol(Symbols *symbols, const char *name) {
-    for (Symbol **p = symbols->end - 1; p >= symbols->begin; p--) {
-        if (strcmp((*p)->name, name) == 0)
-            return *p;
+    if (!symbols || !symbols->begin || !symbols->end) {
+        return NULL;
     }
+
+    for (Symbol **p = symbols->end - 1; p >= symbols->begin; p--) {
+        if (*p == NULL) {
+            continue;
+        }
+        if (strcmp((*p)->name, name) == 0) {
+            return *p;
+        }
+    }
+
     return NULL;
 }
+
 
 void dropSymbols(Symbols *symbols, int depth) {
     while (symbols->end > symbols->begin && (*(symbols->end - 1))->depth == depth) {

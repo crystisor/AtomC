@@ -14,6 +14,8 @@ Token *crtTk = NULL;
 
 int main(int argc, char **argv)
 {
+    initSymbols(&symbols);
+    printf("Symbols initialized: begin=%p, end=%p, after=%p\n", symbols.begin, symbols.end, symbols.after);
     if (argc != 2)
     {
         fprintf(stderr, "Usage: %s <source-file>\n", argv[0]);
@@ -59,13 +61,11 @@ int main(int argc, char **argv)
         ;
 
     crtTk = tokens;
-    initSymbols(&symbols);
     showTokens();
-    printf("a");
     crtTk = tokens;
-    printf("aa");
 
-    if (unit())
+    int unitResult = unit();
+    if (unitResult)
     {
         printf("Syntax is valid.\n");
     }
@@ -73,13 +73,9 @@ int main(int argc, char **argv)
     {
         fprintf(stderr, "Syntax error.\n");
     }
-
-    if (crtTk->code != END)
-    {
-        tkerr(crtTk, "Syntax error: extra tokens at the end");
-    }
-
+    
     // Free everything
+    showSymbolTable(&symbols);
     done();
     free(input);
 
