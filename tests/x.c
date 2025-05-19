@@ -1,4 +1,5 @@
 int foo()
 {
-    int x;
+    int x = -3;
+    2=3;
 }

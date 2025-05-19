@@ -1,3 +1,5 @@
+#include "types.h"
+
 
 int consume(int code);
 
@@ -15,18 +17,18 @@ int arrayDecl();
 int factor();
 int ruleWhile();
 
-int expr();
-int exprAssign();
-int exprOr();
-int exprAnd();
-int exprEq();
-int exprRel();
-int exprAdd();
-int exprMul();
-int exprCast();
-int exprUnary();
-int exprPostfix();
-int exprPrimary();
+int expr(RetVal *rv);
+int exprAssign(RetVal *rv);
+int exprOr(RetVal *rv);
+int exprAnd(RetVal *rv);
+int exprEq(RetVal *rv);
+int exprRel(RetVal *rv);
+int exprAdd(RetVal *rv);
+int exprMul(RetVal *rv);
+int exprCast(RetVal *rv);
+int exprUnary(RetVal *rv);
+int exprPostfix(RetVal *rv);
+int exprPrimary(RetVal *rv);
 
 int stm();
 int stmCompound();
