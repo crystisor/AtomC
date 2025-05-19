@@ -12,6 +12,7 @@ void initSymbols(Symbols *symbols) {
     symbols->begin = NULL;
     symbols->end = NULL;
     symbols->after = NULL;
+    printf("Initialized symbols\n");
 }
 
 Symbol *addSymbol(Symbols *symbols, const char *name, int cls) {
@@ -73,3 +74,17 @@ void showSymbolTable(Symbols *symbols) {
     }
     printf("------------------------\n");
 }
+
+
+void deleteSymbolsAfter(Symbols *symbols, Symbol *start) {
+    // Remove all symbols declared after 'start' (including start if needed)
+    while (symbols->end > symbols->begin) {
+        Symbol *last = *(symbols->end - 1);
+        if (last == start)
+            break;
+        symbols->end--;
+        // Optionally, free symbol if you allocated dynamically:
+        // free(last);
+    }
+}
+

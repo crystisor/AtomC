@@ -54,8 +54,8 @@ void showTokens() {
         }
         printf(" ");
     }
-    printf("\n");
 }
+
 
 
 void done() {

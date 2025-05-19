@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include "utils.h"
 #include "lexer.h"
-#include "token.h"
+// #include "token.h"
 #include "syntactic.h"
+#include "symbols.h"
 
 int line = 1;
 Token *tokens = NULL, *lastToken = NULL;
@@ -56,11 +57,13 @@ int main(int argc, char **argv)
     }
     while (getNextToken() != END)
         ;
-    crtTk = tokens;
 
-    // Print all tokens
+    crtTk = tokens;
+    initSymbols(&symbols);
     showTokens();
-    crtTk = tokens; // reset to first token again, if not already
+    printf("a");
+    crtTk = tokens;
+    printf("aa");
 
     if (unit())
     {
@@ -71,9 +74,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "Syntax error.\n");
     }
 
-    if (crtTk->code != END) 
+    if (crtTk->code != END)
     {
-    tkerr(crtTk, "Syntax error: extra tokens at the end");
+        tkerr(crtTk, "Syntax error: extra tokens at the end");
     }
 
     // Free everything

@@ -1,5 +1,3 @@
-#ifndef SYMBOLS_H
-#define SYMBOLS_H
 
 #include "token.h"
 
@@ -53,5 +51,4 @@ Symbol *addSymbol(Symbols *symbols, const char *name, int cls);
 Symbol *findSymbol(Symbols *symbols, const char *name);
 void dropSymbols(Symbols *symbols, int depth);
 void showSymbolTable(Symbols *symbols);
-
-#endif
+void deleteSymbolsAfter(Symbols *symbols, Symbol *start);

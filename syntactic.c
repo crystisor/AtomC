@@ -10,6 +10,31 @@ extern int crtDepth;          // Current block nesting depth
 extern Token *crtTk;
 Token *consumedTk = NULL;
 
+void addVar(Token *tkName, Type *t)
+{
+    Symbol *s;
+
+    if (crtStruct) {
+        if (findSymbol(&crtStruct->members, tkName->text))
+            tkerr(crtTk, "symbol redefinition: %s", tkName->text);
+        s = addSymbol(&crtStruct->members, tkName->text, CLS_VAR);
+    } else if (crtFunc) {
+        s = findSymbol(&symbols, tkName->text);
+        if (s && s->depth == crtDepth)
+            tkerr(crtTk, "symbol redefinition: %s", tkName->text);
+        s = addSymbol(&symbols, tkName->text, CLS_VAR);
+        s->mem = MEM_LOCAL;
+    } else {
+        if (findSymbol(&symbols, tkName->text))
+            tkerr(crtTk, "symbol redefinition: %s", tkName->text);
+        s = addSymbol(&symbols, tkName->text, CLS_VAR);
+        s->mem = MEM_GLOBAL;
+    }
+
+    s->type = *t;
+}
+
+
 int consume(int code)
 {
     if (crtTk->code == code)
@@ -65,126 +90,144 @@ int declStruct() {
     return 1;
 }
 
-
-int declVar()
-{
+int declVar() {
     Token *startTk = crtTk;
-    if (!typeBase())
-    {
-        return 0;
-    }
-    if (!consume(ID))
-        tkerr(crtTk, "missing variable name");
-    arrayDecl(); // optional
+    Type t;
 
-    while (consume(COMMA))
-    {
-        if (!consume(ID))
-            tkerr(crtTk, "missing variable name after ,");
-        arrayDecl(); // optional
+    if (!typeBase(&t)) return 0;
+
+    if (!consume(ID)) tkerr(crtTk, "missing variable name");
+    Token *tkName = consumedTk;
+
+    if (!arrayDecl(&t)) t.nElements = -1;
+
+    addVar(tkName, &t);
+
+    while (consume(COMMA)) {
+        if (!consume(ID)) tkerr(crtTk, "missing variable name after ,");
+        tkName = consumedTk;
+        if (!arrayDecl(&t)) t.nElements = -1;
+        addVar(tkName, &t);
     }
 
-    if (!consume(SEMICOLON))
-        tkerr(crtTk, "missing ; after variable declaration");
+    if (!consume(SEMICOLON)) tkerr(crtTk, "missing ; after variable declaration");
     return 1;
 }
 
-int funcArg()
-{
-    if (!typeBase())
-        return 0;
-    if (!consume(ID))
-        tkerr(crtTk, "missing argument name");
-    arrayDecl(); // optional
+
+int funcArg() {
+    Type t;
+    if (!typeBase(&t)) return 0;
+    if (!consume(ID)) tkerr(crtTk, "missing argument name");
+    Token *tkName = consumedTk;
+    if (!arrayDecl(&t)) t.nElements = -1;
+
+    Symbol *s = addSymbol(&symbols, tkName->text, CLS_VAR);
+    s->mem = MEM_ARG;
+    s->type = t;
+
+    Symbol *arg = addSymbol(&crtFunc->args, tkName->text, CLS_VAR);
+    arg->mem = MEM_ARG;
+    arg->type = t;
     return 1;
 }
 
-int declFunc()
-{
-    Token *startTk = crtTk;
 
-    if (typeBase())
-    {
-        consume(MUL); // optional *
-    }
-    else if (consume(VOID))
-    {
-        // OK
-    }
-    else
-    {
+int declFunc() {
+    Token *startTk = crtTk;
+    Type t;
+
+    if (typeBase(&t)) {
+        if (consume(MUL)) t.nElements = 0;
+        else t.nElements = -1;
+    } else if (consume(VOID)) {
+        t.typeBase = TB_VOID;
+    } else {
         return 0;
     }
 
-    if (!consume(ID))
-    {
+    if (!consume(ID)) {
         crtTk = startTk;
         return 0;
     }
 
-    if (!consume(LPAR))
-        tkerr(crtTk, "missing ( in function declaration");
+    Token *tkName = consumedTk;
 
-    if (funcArg())
-    {
-        while (consume(COMMA))
-        {
-            if (!funcArg())
-                tkerr(crtTk, "missing function argument");
+    if (!consume(LPAR)) tkerr(crtTk, "missing ( in function declaration");
+
+    if (crtStruct || crtFunc)
+        tkerr(crtTk, "function declared in non-global scope");
+
+    if (findSymbol(&symbols, tkName->text))
+        tkerr(crtTk, "symbol redefinition: %s", tkName->text);
+
+    crtFunc = addSymbol(&symbols, tkName->text, CLS_FUNC);
+    initSymbols(&crtFunc->args);
+    crtFunc->type = t;
+    crtDepth++;
+
+    if (funcArg()) {
+        while (consume(COMMA)) {
+            if (!funcArg()) tkerr(crtTk, "missing function argument");
         }
     }
 
-    if (!consume(RPAR))
-        tkerr(crtTk, "missing ) in function declaration");
+    if (!consume(RPAR)) tkerr(crtTk, "missing ) in function declaration");
+
+    crtDepth--; // parameters done
 
     if (!stmCompound())
         tkerr(crtTk, "missing function body");
 
+    deleteSymbolsAfter(&symbols, crtFunc);
+    crtFunc = NULL;
     return 1;
 }
 
-int typeName()
+
+int typeName(Type *ret)
 {
-    if (!typeBase())
+    if (!typeBase(ret))  // Fill in base type (e.g., int, double, etc.)
         return 0;
-    arrayDecl(); // optional
+
+    if (!arrayDecl(ret)) {
+        ret->nElements = -1;  // No array declaration
+    }
+
     return 1;
 }
 
-int typeBase()
-{
-    if (consume(INT))
+
+int typeBase(Type *ret) {
+    if (consume(INT)) { ret->typeBase = TB_INT; return 1; }
+    if (consume(DOUBLE)) { ret->typeBase = TB_DOUBLE; return 1; }
+    if (consume(CHAR)) { ret->typeBase = TB_CHAR; return 1; }
+    if (consume(STRUCT)) {
+        if (!consume(ID)) tkerr(crtTk, "missing identifier after struct");
+        Token *tkName = consumedTk;
+        Symbol *s = findSymbol(&symbols, tkName->text);
+        if (!s) tkerr(crtTk, "undefined symbol: %s", tkName->text);
+        if (s->cls != CLS_STRUCT) tkerr(crtTk, "%s is not a struct", tkName->text);
+        ret->typeBase = TB_STRUCT;
+        ret->s = s;
         return 1;
-    if (consume(DOUBLE))
-        return 1;
-    if (consume(CHAR))
-        return 1;
-    if (consume(STRUCT))
-    {
-        if (consume(ID))
-        {
-            return 1;
-        }
-        else
-        {
-            tkerr(crtTk, "missing identifier after struct");
-        }
     }
     return 0;
 }
 
-int arrayDecl()
-{
-    if (consume(LBRACKET))
-    {
-        if (!expr())
-            tkerr(crtTk, "invalid expression in array declaration");
-        if (!consume(RBRACKET))
-            tkerr(crtTk, "missing ] in array declaration");
+
+int arrayDecl(Type *ret) {
+    if (consume(LBRACKET)) {
+        if (!expr()) {
+            // just ignore for now, as per original spec
+        }
+        ret->nElements = 0;  // Do not compute real size
+        if (!consume(RBRACKET)) tkerr(crtTk, "missing ] in array declaration");
         return 1;
     }
-    return 0; // optional, so no error here
+    return 0;
 }
+
 
 int expr()
 {
@@ -254,16 +297,20 @@ int exprMul() {
 
 int exprCast() {
     Token *startTk = crtTk;
+
     if (consume(LPAR)) {
-        if (typeName()) {
+        Type t;
+        if (typeName(&t)) {
             if (!consume(RPAR)) tkerr(crtTk, "missing ) in cast expression");
             if (!exprCast()) tkerr(crtTk, "missing expression after cast");
             return 1;
         }
         crtTk = startTk; // rollback if it's not a type cast
     }
+
     return exprUnary();
 }
+
 
 int exprUnary() {
     if (consume(SUB) || consume(NOT)) {
@@ -389,23 +436,21 @@ int stm() {
 
 
 int stmCompound() {
-    if (!consume(LACC))
-        return 0;
+    if (!consume(LACC)) return 0;
+
+    Symbol *start = symbols.end[-1]; // mark where to clean up
+    crtDepth++;
 
     while (1) {
-        if (declVar()) {
-            // variable declaration
-        }
-        else if (stm()) {
-            // statement
-        }
-        else {
-            break;
-        }
+        if (declVar()) { }
+        else if (stm()) { }
+        else break;
     }
 
-    if (!consume(RACC))
-        tkerr(crtTk, "missing } or syntax error");
+    crtDepth--;
+    deleteSymbolsAfter(&symbols, start);
 
+    if (!consume(RACC)) tkerr(crtTk, "missing } or syntax error");
     return 1;
 }
+

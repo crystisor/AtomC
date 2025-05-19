@@ -15,7 +15,7 @@ int getNextToken() {
 
     while (1) {
         ch = *pCrtCh;
-        printf("State %d, char '%c' (ASCII %d)\n", state, ch, ch);
+        //printf("State %d, char '%c' (ASCII %d)\n", state, ch, ch);
 
         switch (state) {
         case 0:
