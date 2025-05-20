@@ -1,10 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "utils.h"
-#include "lexer.h"
-// #include "token.h"
 #include "syntactic.h"
-#include "symbols.h"
+#include "lexer.h"
 
 int line = 1;
 Token *tokens = NULL, *lastToken = NULL;

@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "syntactic.h"
-#include "symbols.h"
+#include <string.h>
 
 Symbol *crtStruct = NULL; // Current struct being defined
 Symbol *crtFunc = NULL;   // Current function being defined
@@ -9,9 +9,25 @@ extern int crtDepth;      // Current block nesting depth
 extern Token *crtTk;
 Token *consumedTk = NULL;
 
+int isTypeName()
+{
+    Token *start = crtTk;
+    Type dummy;
+    int result = typeName(&dummy);
+    crtTk = start;
+    return result;
+}
+
 void addVar(Token *tkName, Type *t)
 {
     Symbol *s;
+
+    if (t->typeBase == TB_VOID)
+        tkerr(tkName, "variable '%s' cannot be of type void", tkName->text);
+    if (t->nElements >= 0 && t->typeBase == TB_VOID)
+        tkerr(tkName, "array cannot have void elements");
+    if (t->nElements >= 0 && t->nElements == 0)
+        tkerr(tkName, "array size must be positive");
 
     if (crtStruct)
     {
@@ -75,7 +91,7 @@ int unit()
 int declStruct()
 {
 
-    //Token *startTk = crtTk;
+    // Token *startTk = crtTk;
     if (!consume(STRUCT))
         return 0;
     if (!consume(ID))
@@ -108,7 +124,7 @@ int declStruct()
 
 int declVar()
 {
-    //Token *startTk = crtTk;
+    // Token *startTk = crtTk;
     Type t;
 
     if (!typeBase(&t))
@@ -122,6 +138,16 @@ int declVar()
         t.nElements = -1;
 
     addVar(tkName, &t);
+
+    if (consume(ASSIGN))
+    {
+        RetVal rv;
+        if (!expr(&rv))
+            tkerr(crtTk, "invalid initializer");
+
+        if (!canCast(&rv.type, &t))
+            tkerr(crtTk, "cannot cast initializer to declared type");
+    }
 
     while (consume(COMMA))
     {
@@ -189,7 +215,6 @@ int declFunc()
     }
 
     Token *tkName = consumedTk;
-
 
     if (!consume(LPAR))
         tkerr(crtTk, "missing ( in function declaration");
@@ -279,11 +304,14 @@ int arrayDecl(Type *ret)
 {
     if (consume(LBRACKET))
     {
-        if (!expr())
+        RetVal rvSize;
+        if (!expr(&rvSize))
         {
-            // just ignore for now, as per original spec
+            // Just ignore for now, as per original spec
         }
+
         ret->nElements = 0; // Do not compute real size
+
         if (!consume(RBRACKET))
             tkerr(crtTk, "missing ] in array declaration");
         return 1;
@@ -291,191 +319,298 @@ int arrayDecl(Type *ret)
     return 0;
 }
 
-int expr()
+int expr(RetVal *rv)
 {
-    return exprAssign();
+    return exprAssign(rv);
 }
 
-int exprAssign()
+int exprAssign(RetVal *rv)
 {
     Token *startTk = crtTk;
-    if (exprUnary())
+
+    RetVal rvl;
+    if (exprUnary(&rvl))
     {
         if (consume(ASSIGN))
         {
-            if (!exprAssign())
+            RetVal rvr;
+            if (!exprAssign(&rvr))
                 tkerr(crtTk, "missing right side of assignment");
+
+            if (!rvl.isLVal)
+                tkerr(crtTk, "left operand is not a lvalue");
+
+            if (!rvr.wasCast && !canCast(&rvr.type, &rvl.type))
+            {
+                tkerr(crtTk, "cannot implicitly convert %s to %s",
+                      typeToString(&rvr.type), typeToString(&rvl.type));
+            }
+
+            cast(&rvl.type, &rvr.type);
+            *rv = rvl;
             return 1;
         }
-        crtTk = startTk; // rollback if no assignment found
+        crtTk = startTk;
     }
-    crtTk = startTk;
-    return exprOr();
+
+    return exprOr(rv);
 }
 
-int exprOr()
+int exprOr(RetVal *rv)
 {
-    if (!exprAnd())
+    RetVal r1, r2;
+    if (!exprAnd(&r1))
         return 0;
     while (consume(OR))
     {
-        if (!exprAnd())
+        if (!exprAnd(&r2))
             tkerr(crtTk, "missing right operand after ||");
+        r1.type = createType(TB_INT, -1);
+        r1.isLVal = 0;
+        r1.isCtVal = 0;
     }
+    *rv = r1;
     return 1;
 }
 
-int exprAnd()
+int exprAnd(RetVal *rv)
 {
-    if (!exprEq())
+    RetVal r1, r2;
+    if (!exprEq(&r1))
         return 0;
     while (consume(AND))
     {
-        if (!exprEq())
+        if (!exprEq(&r2))
             tkerr(crtTk, "missing right operand after &&");
+        r1.type = createType(TB_INT, -1);
+        r1.isLVal = 0;
+        r1.isCtVal = 0;
     }
+    *rv = r1;
     return 1;
 }
 
-int exprEq()
+int exprEq(RetVal *rv)
 {
-    if (!exprRel())
+    RetVal r1, r2;
+    if (!exprRel(&r1))
         return 0;
     while (consume(EQUAL) || consume(NOTEQ))
     {
-        if (!exprRel())
+        if (!exprRel(&r2))
             tkerr(crtTk, "missing right operand after == or !=");
+        r1.type = createType(TB_INT, -1);
+        r1.isLVal = 0;
+        r1.isCtVal = 0;
     }
+    *rv = r1;
     return 1;
 }
 
-int exprRel()
+int exprRel(RetVal *rv)
 {
-    if (!exprAdd())
+    RetVal r1, r2;
+    if (!exprAdd(&r1))
         return 0;
     while (consume(LESS) || consume(LESSEQ) || consume(GREATER) || consume(GREATEREQ))
     {
-        if (!exprAdd())
+        if (!exprAdd(&r2))
             tkerr(crtTk, "missing right operand after relational operator");
+        r1.type = createType(TB_INT, -1);
+        r1.isLVal = 0;
+        r1.isCtVal = 0;
     }
+    *rv = r1;
     return 1;
 }
 
-int exprAdd()
+int exprAdd(RetVal *rv)
 {
-    if (!exprMul())
+    RetVal r1, r2;
+    if (!exprMul(&r1))
         return 0;
     while (consume(ADD) || consume(SUB))
     {
-        if (!exprMul())
+        if (!exprMul(&r2))
             tkerr(crtTk, "missing operand after + or -");
+        r1.type = getArithType(&r1.type, &r2.type);
+        r1.isLVal = 0;
+        r1.isCtVal = 0;
     }
+    *rv = r1;
     return 1;
 }
 
-int exprMul()
+int exprMul(RetVal *rv)
 {
-    if (!exprCast())
+    RetVal r1, r2;
+    if (!exprCast(&r1))
         return 0;
     while (consume(MUL) || consume(DIV))
     {
-        if (!exprCast())
+        if (!exprCast(&r2))
             tkerr(crtTk, "missing operand after * or /");
+        r1.type = getArithType(&r1.type, &r2.type);
+        r1.isLVal = 0;
+        r1.isCtVal = 0;
     }
+    *rv = r1;
     return 1;
 }
 
-int exprCast()
+int exprCast(RetVal *rv)
 {
+    printf("\nat exprCast\n");
     Token *startTk = crtTk;
 
     if (consume(LPAR))
     {
-        Type t;
-        if (typeName(&t))
+        if (isTypeName()) // Lookahead to confirm it's a cast
         {
+            Type t;
+            typeName(&t); // Actually consume it
+
             if (!consume(RPAR))
                 tkerr(crtTk, "missing ) in cast expression");
-            if (!exprCast())
+
+            RetVal rvInner;
+            if (!exprCast(&rvInner))
                 tkerr(crtTk, "missing expression after cast");
+
+            if (!canCast(&rvInner.type, &t))
+                tkerr(crtTk, "invalid cast");
+
+            cast(&t, &rvInner.type);
+            *rv = (RetVal){.type = t, .isLVal = 0, .isCtVal = rvInner.isCtVal, .wasCast = 1};
+
             return 1;
         }
-        crtTk = startTk; // rollback if it's not a type cast
+
+        crtTk = startTk; // not a cast — rollback
     }
 
-    return exprUnary();
+    return exprPrimary(rv); // Fallback to the true base
 }
 
-int exprUnary()
+int exprUnary(RetVal *rv)
 {
     if (consume(SUB) || consume(NOT))
     {
-        if (!exprUnary())
+        RetVal operand;
+        if (!exprUnary(&operand))
             tkerr(crtTk, "missing operand after unary operator");
+
+        if (operand.type.typeBase != TB_INT && operand.type.typeBase != TB_DOUBLE)
+            tkerr(crtTk, "invalid type for unary operator");
+
+        operand.isLVal = 0;
+        *rv = operand;
         return 1;
     }
-    return exprPostfix();
+
+    return exprCast(rv);
 }
 
-int exprPostfix()
+int exprPostfix(RetVal *rv)
 {
-    //Token *startTk = crtTk;
-    if (!exprPrimary())
+    if (!exprPrimary(rv))
         return 0;
-
-    for (;;)
+    while (1)
     {
         if (consume(LBRACKET))
         {
-            if (!expr())
+            RetVal idx;
+            if (!expr(&idx))
                 tkerr(crtTk, "missing expression inside []");
             if (!consume(RBRACKET))
                 tkerr(crtTk, "missing ]");
+            if (rv->type.nElements < 0)
+                tkerr(crtTk, "subscripted value is not an array");
+            rv->type.nElements = -1;
+            rv->isLVal = 1;
+            rv->isCtVal = 0;
         }
         else if (consume(DOT))
         {
             if (!consume(ID))
                 tkerr(crtTk, "missing field name after .");
+            // Add field access logic if needed
         }
         else
         {
             break;
         }
     }
-
     return 1;
 }
 
-int exprPrimary()
+int exprPrimary(RetVal *rv)
 {
     Token *startTk = crtTk;
 
     if (consume(ID))
     {
+        Symbol *s = findSymbol(&symbols, consumedTk->text);
+        if (!s)
+            tkerr(crtTk, "undefined identifier: %s", consumedTk->text);
+        memcpy(&rv->type, &s->type, sizeof(Type));
+        rv->isLVal = (s->cls == CLS_VAR);
+        rv->isCtVal = 0;
+
         if (consume(LPAR))
         {
-            if (expr())
+            // function call
+            // for now, we skip args
+            while (!consume(RPAR))
             {
-                while (consume(COMMA))
-                {
-                    if (!expr())
-                        tkerr(crtTk, "missing expression after comma");
-                }
+                RetVal arg;
+                if (!expr(&arg))
+                    tkerr(crtTk, "invalid argument");
+                consume(COMMA); // allow trailing comma
             }
-            if (!consume(RPAR))
-                tkerr(crtTk, "missing ) after function call");
         }
         return 1;
     }
 
-    if (consume(CT_INT) || consume(CT_REAL) || consume(CT_CHAR) || consume(CT_STRING))
+    if (consume(CT_INT))
     {
+        rv->type = createType(TB_INT, -1);
+        rv->isCtVal = 1;
+        rv->ctVal.i = consumedTk->i;
+        rv->isLVal = 0;
+        return 1;
+    }
+
+    if (consume(CT_REAL))
+    {
+        rv->type = createType(TB_DOUBLE, -1);
+        rv->isCtVal = 1;
+        rv->ctVal.d = consumedTk->r;
+        rv->isLVal = 0;
+        return 1;
+    }
+
+    if (consume(CT_CHAR))
+    {
+        rv->type = createType(TB_CHAR, -1);
+        rv->isCtVal = 1;
+        rv->ctVal.i = consumedTk->i;
+        rv->isLVal = 0;
+        return 1;
+    }
+
+    if (consume(CT_STRING))
+    {
+        rv->type = createType(TB_CHAR, 0);
+        rv->isCtVal = 1;
+        rv->ctVal.str = consumedTk->text;
+        rv->isLVal = 0;
         return 1;
     }
 
     if (consume(LPAR))
     {
-        if (!expr())
+        if (!expr(rv))
             tkerr(crtTk, "invalid expression in parentheses");
         if (!consume(RPAR))
             tkerr(crtTk, "missing )");
@@ -485,7 +620,6 @@ int exprPrimary()
     crtTk = startTk;
     return 0;
 }
-
 int stm()
 {
     Token *startTk = crtTk;
@@ -497,10 +631,16 @@ int stm()
     {
         if (!consume(LPAR))
             tkerr(crtTk, "missing ( after if");
-        if (!expr())
+
+        RetVal rvCond;
+        if (!expr(&rvCond))
             tkerr(crtTk, "invalid expression in if");
+        if (rvCond.type.nElements >= 0 || rvCond.type.typeBase == TB_STRUCT)
+            tkerr(crtTk, "a condition must be of scalar type");
+
         if (!consume(RPAR))
             tkerr(crtTk, "missing ) after if expression");
+
         if (!stm())
             tkerr(crtTk, "missing statement after if");
 
@@ -516,8 +656,13 @@ int stm()
     {
         if (!consume(LPAR))
             tkerr(crtTk, "missing ( after while");
-        if (!expr())
+
+        RetVal rvCond;
+        if (!expr(&rvCond))
             tkerr(crtTk, "invalid expression in while");
+        if (rvCond.type.nElements >= 0 || rvCond.type.typeBase == TB_STRUCT)
+            tkerr(crtTk, "a condition must be of scalar type");
+
         if (!consume(RPAR))
             tkerr(crtTk, "missing ) after while expression");
         if (!stm())
@@ -531,17 +676,32 @@ int stm()
             tkerr(crtTk, "missing ( after for");
 
         // Optional init expression
-        expr();
+        if (crtTk->code != SEMICOLON)
+        {
+            RetVal rv;
+            expr(&rv);
+        }
         if (!consume(SEMICOLON))
             tkerr(crtTk, "missing ; after for init expression");
 
         // Optional condition expression
-        expr();
+        if (crtTk->code != SEMICOLON)
+        {
+            RetVal rvCond;
+            if (!expr(&rvCond))
+                tkerr(crtTk, "invalid expression in for condition");
+            if (rvCond.type.nElements >= 0 || rvCond.type.typeBase == TB_STRUCT)
+                tkerr(crtTk, "a condition must be of scalar type");
+        }
         if (!consume(SEMICOLON))
             tkerr(crtTk, "missing ; after for condition");
 
         // Optional increment expression
-        expr();
+        if (crtTk->code != RPAR)
+        {
+            RetVal rv;
+            expr(&rv);
+        }
         if (!consume(RPAR))
             tkerr(crtTk, "missing ) after for increment");
 
@@ -559,14 +719,33 @@ int stm()
 
     if (consume(RETURN))
     {
-        expr(); // optional expression
+        if (crtTk->code != SEMICOLON)
+        {
+            RetVal rv;
+            if (!expr(&rv))
+                tkerr(crtTk, "invalid expression in return");
+            if (crtFunc->type.typeBase == TB_VOID)
+                tkerr(crtTk, "void function should not return a value");
+
+            cast(&crtFunc->type, &rv.type);
+        }
+        else
+        {
+            if (crtFunc->type.typeBase != TB_VOID)
+                tkerr(crtTk, "non-void function must return a value");
+        }
+
         if (!consume(SEMICOLON))
             tkerr(crtTk, "missing ; after return");
         return 1;
     }
 
     // expr? SEMICOLON
-    expr(); // optional
+    if (crtTk->code != SEMICOLON)
+    {
+        RetVal rv;
+        expr(&rv);
+    }
     if (!consume(SEMICOLON))
     {
         crtTk = startTk;
@@ -589,11 +768,16 @@ int stmCompound()
         if (declVar())
         {
         }
-        else if (stm())
-        {
-        }
         else
-            break;
+        {
+            RetVal rv;
+            if (stm(&rv))
+            {
+                // optional: use rv.type if needed
+            }
+            else
+                break;
+        }
     }
 
     crtDepth--;
@@ -601,5 +785,6 @@ int stmCompound()
 
     if (!consume(RACC))
         tkerr(crtTk, "missing } or syntax error");
+
     return 1;
 }
