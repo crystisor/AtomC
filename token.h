@@ -33,6 +33,7 @@ enum
     BREAK,
     CHAR,
     DOUBLE,
+    FLOAT,
     ELSE,
     FOR,
     IF,

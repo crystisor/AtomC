@@ -75,18 +75,18 @@ int unit()
         Token *startTk = crtTk;
 
         Type t;
-        if (typeBase(&t) || consume(VOID))
+        if (typeName(&t) || consume(VOID))
         {
             if (!consume(ID))
                 tkerr(crtTk, "missing identifier");
 
-            Token *tkName = consumedTk;
-
-            if (lookAhead && lookAhead->code == LPAR) {
+            if (lookAhead && lookAhead->code == LPAR) 
+            {
                 crtTk = startTk;
                 if (!declFunc())
                     tkerr(crtTk, "invalid function declaration");
-            } else {
+            } else 
+            {
                 crtTk = startTk;
                 if (!declVar())
                     tkerr(crtTk, "invalid variable declaration");
@@ -143,16 +143,17 @@ int declStruct()
 
 int declVar()
 {
-    Type baseType;
+    //Type baseType;
+    Type varType;
 
-    if (!typeBase(&baseType))
+    if (!typeName(&varType))
         return 0;
 
     if (!consume(ID))
         tkerr(crtTk, "missing variable name");
     Token *tkName = consumedTk;
 
-    Type varType = baseType;
+    //Type varType = baseType;
     arrayDecl(&varType);
 
     addVar(tkName, &varType);
@@ -171,7 +172,7 @@ int declVar()
             tkerr(crtTk, "missing variable name after ,");
         tkName = consumedTk;
 
-        varType = baseType;  // RESET to base type
+        //varType = baseType;  // RESET to base type
         if (!arrayDecl(&varType))
             varType.nElements = -1;
 
@@ -276,6 +277,9 @@ int typeName(Type *ret)
     if (!typeBase(ret)) // Fill in base type (e.g., int, double, etc.)
         return 0;
 
+    ret->nPtr = 0; //init
+    while (consume(MUL)) // Consume '*' tokens
+        ret->nPtr++;
     if (!arrayDecl(ret))
     {
         ret->nElements = -1; // No array declaration
@@ -299,6 +303,11 @@ int typeBase(Type *ret)
     if (consume(CHAR))
     {
         ret->typeBase = TB_CHAR;
+        return 1;
+    }
+    if (consume(FLOAT))
+    {
+        ret->typeBase = TB_FLOAT;
         return 1;
     }
     if (consume(STRUCT))
@@ -520,22 +529,69 @@ int exprCast(RetVal *rv)
 
 int exprUnary(RetVal *rv)
 {
-    if (consume(SUB) || consume(NOT))
-    {
+    if (consume(SUB)) {
         RetVal operand;
         if (!exprUnary(&operand))
-            tkerr(crtTk, "missing operand after unary operator");
+            tkerr(crtTk, "missing operand after '-'");
 
         if (operand.type.typeBase != TB_INT && operand.type.typeBase != TB_DOUBLE)
-            tkerr(crtTk, "invalid type for unary operator");
+            tkerr(crtTk, "invalid type for unary '-'");
 
         operand.isLVal = 0;
         *rv = operand;
         return 1;
     }
 
+    if (consume(NOT)) {
+        RetVal operand;
+        if (!exprUnary(&operand))
+            tkerr(crtTk, "missing operand after '!'");
+        
+        if (operand.type.typeBase != TB_INT)
+            tkerr(crtTk, "invalid type for '!': expected int");
+
+        operand.isLVal = 0;
+        *rv = operand;
+        return 1;
+    }
+
+    if (consume(AND)) {
+        RetVal operand;
+        if (!exprUnary(&operand))
+            tkerr(crtTk, "missing operand after '&'");
+        
+        if (!operand.isLVal)
+            tkerr(crtTk, "cannot take address of rvalue");
+
+        Type t = operand.type;
+        t.nPtr++;
+        operand.type = t;
+        operand.isLVal = 0;
+        operand.isCtVal = 0;
+        *rv = operand;
+        return 1;
+    }
+
+    if (consume(MUL)) {
+        RetVal operand;
+        if (!exprUnary(&operand))
+            tkerr(crtTk, "missing operand after '*'");
+
+        if (operand.type.nPtr < 1)
+            tkerr(crtTk, "cannot dereference non-pointer");
+
+        Type t = operand.type;
+        t.nPtr--;
+        operand.type = t;
+        operand.isLVal = 1;
+        operand.isCtVal = 0;
+        *rv = operand;
+        return 1;
+    }
+
     return exprCast(rv);
 }
+
 
 int exprPostfix(RetVal *rv)
 {

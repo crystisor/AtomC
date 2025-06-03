@@ -85,19 +85,56 @@ void cast(Type *dst, Type *src) {
 
 
 int canCast(Type *src, Type *dst) {
-    // Array rules
     if (src->nElements > -1 || dst->nElements > -1) {
-        return (src->nElements > -1 && dst->nElements > -1 && src->typeBase == dst->typeBase);
+        if (src->nElements > -1 && dst->nElements > -1) {
+            return src->typeBase == dst->typeBase;
+        }
+        return 0;
+    }
+    if (src->nPtr || dst->nPtr) {
+        if (src->nPtr && dst->nPtr) {
+            // Allow T* to T* (exact match)
+            if (src->typeBase == dst->typeBase) return 1;
+            // Allow T* to void*
+            if (dst->typeBase == TB_VOID) return 1;
+            // Allow void* to T*
+            if (src->typeBase == TB_VOID) return 1;
+        }
+        return 0;
     }
 
-    // Primitive type casting rules
+
     switch (src->typeBase) {
     case TB_CHAR:
     case TB_INT:
+        switch (dst->typeBase) {
+        case TB_CHAR:
+        case TB_INT:
+        case TB_FLOAT:
+        case TB_DOUBLE:
+            return 1;
+        default:
+            return 0;
+        }
+
+    case TB_FLOAT:
+        switch (dst->typeBase) {
+        case TB_CHAR:
+        case TB_INT:
+            return 1;
+        case TB_FLOAT:
+        case TB_DOUBLE:
+            return 1;
+        default:
+            return 0;
+        }
+
     case TB_DOUBLE:
         switch (dst->typeBase) {
         case TB_CHAR:
         case TB_INT:
+        case TB_FLOAT:
+            return 1;
         case TB_DOUBLE:
             return 1;
         default:
@@ -106,6 +143,9 @@ int canCast(Type *src, Type *dst) {
 
     case TB_STRUCT:
         return (dst->typeBase == TB_STRUCT && src->s == dst->s);
+
+    case TB_VOID:
+        return 0;
 
     default:
         return 0;

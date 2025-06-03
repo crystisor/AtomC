@@ -52,7 +52,7 @@ int getNextToken() {
                     pCrtCh++;
                     addTk(AMP);
                     return AMP;
-                    //tkerr(addTk(END), "invalid character: expected &&");
+                    tkerr(addTk(END), "invalid character: expected &&");
                 }
             } else if (ch == '|') {
                 if (*(pCrtCh + 1) == '|') {
@@ -154,6 +154,7 @@ int getNextToken() {
             else if (nCh == 4 && !memcmp(pStartCh, "char", 4)) tk = addTk(CHAR);
             else if (nCh == 6 && !memcmp(pStartCh, "double", 6)) tk = addTk(DOUBLE);
             else if (nCh == 4 && !memcmp(pStartCh, "else", 4)) tk = addTk(ELSE);
+            else if (nCh == 5 && !memcmp(pStartCh, "float", 5)) tk = addTk(FLOAT);
             else if (nCh == 3 && !memcmp(pStartCh, "for", 3)) tk = addTk(FOR);
             else if (nCh == 2 && !memcmp(pStartCh, "if", 2)) tk = addTk(IF);
             else if (nCh == 3 && !memcmp(pStartCh, "int", 3)) tk = addTk(INT);

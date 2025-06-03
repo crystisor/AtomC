@@ -2,7 +2,7 @@
 #include "token.h"
 
 // --- Type Base ---
-enum { TB_INT, TB_DOUBLE, TB_CHAR, TB_STRUCT, TB_VOID };
+enum { TB_INT, TB_DOUBLE, TB_CHAR, TB_STRUCT, TB_VOID, TB_FLOAT, TB_PTR };
 
 // --- Symbol Class ---
 enum { CLS_VAR, CLS_FUNC, CLS_EXTFUNC, CLS_STRUCT };
@@ -19,6 +19,8 @@ typedef struct {
     int typeBase;     // TB_*
     Symbol *s;        // struct definition if TB_STRUCT
     int nElements;    // >0: array, 0: array without size, <0: non-array
+    int nPtr;   // number of pointer indirections (0: no pointer, 1: *, 2: **, etc.)
+    struct Type *subType;
 } Type;
 
 // Symbols list
