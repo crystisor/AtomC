@@ -41,6 +41,7 @@ enum
     STRUCT,
     VOID,
     WHILE,
+    AMP,
 
     // Delimiters
     COMMA,     // ,

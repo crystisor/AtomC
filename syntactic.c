@@ -8,6 +8,8 @@ Symbol *crtFunc = NULL;   // Current function being defined
 extern int crtDepth;      // Current block nesting depth
 extern Token *crtTk;
 Token *consumedTk = NULL;
+extern Token *lookAhead;
+
 
 int isTypeName()
 {
@@ -60,6 +62,7 @@ int consume(int code)
     {
         consumedTk = crtTk;
         crtTk = crtTk->next;
+        lookAhead = crtTk;
         return 1; // success
     }
     return 0; // no match
@@ -69,24 +72,40 @@ int unit()
 {
     while (1)
     {
+        Token *startTk = crtTk;
+
+        Type t;
+        if (typeBase(&t) || consume(VOID))
+        {
+            if (!consume(ID))
+                tkerr(crtTk, "missing identifier");
+
+            Token *tkName = consumedTk;
+
+            if (lookAhead && lookAhead->code == LPAR) {
+                crtTk = startTk;
+                if (!declFunc())
+                    tkerr(crtTk, "invalid function declaration");
+            } else {
+                crtTk = startTk;
+                if (!declVar())
+                    tkerr(crtTk, "invalid variable declaration");
+            }
+            continue;
+        }
+
         if (declStruct())
-        {
             continue;
-        }
-        if (declFunc())
-        {
-            continue;
-        }
-        if (declVar())
-        {
-            continue;
-        }
+
         break;
     }
+
     if (!consume(END))
         tkerr(crtTk, "missing END");
+
     return 1;
 }
+
 
 int declStruct()
 {
@@ -124,45 +143,47 @@ int declStruct()
 
 int declVar()
 {
-    // Token *startTk = crtTk;
-    Type t;
+    Type baseType;
 
-    if (!typeBase(&t))
+    if (!typeBase(&baseType))
         return 0;
 
     if (!consume(ID))
         tkerr(crtTk, "missing variable name");
     Token *tkName = consumedTk;
 
-    if (!arrayDecl(&t))
-        t.nElements = -1;
+    Type varType = baseType;
+    arrayDecl(&varType);
 
-    addVar(tkName, &t);
+    addVar(tkName, &varType);
 
-    if (consume(ASSIGN))
-    {
+    if (consume(ASSIGN)) {
         RetVal rv;
         if (!expr(&rv))
             tkerr(crtTk, "invalid initializer");
 
-        if (!canCast(&rv.type, &t))
+        if (!canCast(&rv.type, &varType))
             tkerr(crtTk, "cannot cast initializer to declared type");
     }
 
-    while (consume(COMMA))
-    {
+    while (consume(COMMA)) {
         if (!consume(ID))
             tkerr(crtTk, "missing variable name after ,");
         tkName = consumedTk;
-        if (!arrayDecl(&t))
-            t.nElements = -1;
-        addVar(tkName, &t);
+
+        varType = baseType;  // RESET to base type
+        if (!arrayDecl(&varType))
+            varType.nElements = -1;
+
+        addVar(tkName, &varType);
     }
 
     if (!consume(SEMICOLON))
         tkerr(crtTk, "missing ; after variable declaration");
+
     return 1;
 }
+
 
 int funcArg()
 {
@@ -199,12 +220,10 @@ int declFunc()
     }
     else if (consume(VOID))
     {
-        printf("consume VOID\n");
         t.typeBase = TB_VOID;
     }
     else
     {
-        printf("typeBase and VOID fail\n");
         return 0;
     }
 
@@ -244,7 +263,6 @@ int declFunc()
 
     if (!stmCompound())
     {
-        printf("missing function body\n");
         tkerr(crtTk, "missing function body");
     }
 
@@ -307,15 +325,25 @@ int arrayDecl(Type *ret)
         RetVal rvSize;
         if (!expr(&rvSize))
         {
-            // Just ignore for now, as per original spec
+            tkerr(crtTk, "invalid expression for array size");
+        }
+        if (rvSize.isCtVal == 0 || rvSize.type.typeBase != TB_INT || rvSize.type.nElements != -1)
+        {
+            tkerr(crtTk, "array size must be an integer constant scalar");
         }
 
-        ret->nElements = 0; // Do not compute real size
+        ret->nElements = rvSize.ctVal.i;
+
+        if (ret->nElements <= 0) {
+            tkerr(crtTk, "array size must be positive");
+        }
 
         if (!consume(RBRACKET))
             tkerr(crtTk, "missing ] in array declaration");
         return 1;
     }
+
+    ret->nElements = -1; // No array declaration
     return 0;
 }
 
@@ -460,7 +488,6 @@ int exprMul(RetVal *rv)
 
 int exprCast(RetVal *rv)
 {
-    printf("\nat exprCast\n");
     Token *startTk = crtTk;
 
     if (consume(LPAR))
@@ -468,7 +495,7 @@ int exprCast(RetVal *rv)
         if (isTypeName()) // Lookahead to confirm it's a cast
         {
             Type t;
-            typeName(&t); // Actually consume it
+            typeName(&t);
 
             if (!consume(RPAR))
                 tkerr(crtTk, "missing ) in cast expression");
@@ -482,14 +509,13 @@ int exprCast(RetVal *rv)
 
             cast(&t, &rvInner.type);
             *rv = (RetVal){.type = t, .isLVal = 0, .isCtVal = rvInner.isCtVal, .wasCast = 1};
-
             return 1;
         }
 
-        crtTk = startTk; // not a cast — rollback
+        crtTk = startTk;
     }
 
-    return exprPrimary(rv); // Fallback to the true base
+    return exprPrimary(rv); 
 }
 
 int exprUnary(RetVal *rv)
@@ -534,7 +560,6 @@ int exprPostfix(RetVal *rv)
         {
             if (!consume(ID))
                 tkerr(crtTk, "missing field name after .");
-            // Add field access logic if needed
         }
         else
         {
@@ -559,14 +584,12 @@ int exprPrimary(RetVal *rv)
 
         if (consume(LPAR))
         {
-            // function call
-            // for now, we skip args
             while (!consume(RPAR))
             {
                 RetVal arg;
                 if (!expr(&arg))
                     tkerr(crtTk, "invalid argument");
-                consume(COMMA); // allow trailing comma
+                consume(COMMA);
             }
         }
         return 1;
@@ -620,6 +643,7 @@ int exprPrimary(RetVal *rv)
     crtTk = startTk;
     return 0;
 }
+
 int stm()
 {
     Token *startTk = crtTk;
@@ -675,7 +699,6 @@ int stm()
         if (!consume(LPAR))
             tkerr(crtTk, "missing ( after for");
 
-        // Optional init expression
         if (crtTk->code != SEMICOLON)
         {
             RetVal rv;
@@ -684,7 +707,6 @@ int stm()
         if (!consume(SEMICOLON))
             tkerr(crtTk, "missing ; after for init expression");
 
-        // Optional condition expression
         if (crtTk->code != SEMICOLON)
         {
             RetVal rvCond;
@@ -696,7 +718,6 @@ int stm()
         if (!consume(SEMICOLON))
             tkerr(crtTk, "missing ; after for condition");
 
-        // Optional increment expression
         if (crtTk->code != RPAR)
         {
             RetVal rv;
@@ -739,8 +760,6 @@ int stm()
             tkerr(crtTk, "missing ; after return");
         return 1;
     }
-
-    // expr? SEMICOLON
     if (crtTk->code != SEMICOLON)
     {
         RetVal rv;
@@ -773,7 +792,6 @@ int stmCompound()
             RetVal rv;
             if (stm(&rv))
             {
-                // optional: use rv.type if needed
             }
             else
                 break;

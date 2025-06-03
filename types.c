@@ -63,100 +63,52 @@ const char *typeToString(Type *t)
     return buf;
 }
 
-void cast(Type *dst, Type *src)
-{
-    if (src->nElements > -1)
-    {
-        if (dst->nElements > -1)
-        {
-            if (src->typeBase != dst->typeBase)
-                tkerr(crtTk, "an array cannot be converted to an array of another type");
+void cast(Type *dst, Type *src) {
+    // Ensure types match structurally; no semantic checks here
+
+    // Check arrays must be same base type and both arrays
+    if (src->nElements > -1 || dst->nElements > -1) {
+        if (!(src->nElements > -1 && dst->nElements > -1 && src->typeBase == dst->typeBase)) {
+            tkerr(crtTk, "invalid array cast");
         }
-        else
-        {
-            tkerr(crtTk, "an array cannot be converted to a non-array");
-        }
-    }
-    else
-    {
-        if (dst->nElements > -1)
-        {
-            tkerr(crtTk, "a non-array cannot be converted to an array");
-        }
-    }
-    if (src->typeBase == TB_DOUBLE && dst->typeBase == TB_INT)
-    {
-        printf("\na");
-        tkerr(crtTk, "cannot implicitly convert double to int");
+        return;
     }
 
-    switch (src->typeBase)
-    {
-    case TB_CHAR:
-    case TB_INT:
-    case TB_DOUBLE:
-        switch (dst->typeBase)
-        {
-        case TB_CHAR:
-        case TB_INT:
-        case TB_DOUBLE:
-            return;
+    // For structs, only allow same struct type
+    if (src->typeBase == TB_STRUCT || dst->typeBase == TB_STRUCT) {
+        if (!(src->typeBase == TB_STRUCT && dst->typeBase == TB_STRUCT && src->s == dst->s)) {
+            tkerr(crtTk, "invalid struct cast");
         }
-        break;
-    case TB_STRUCT:
-        if (dst->typeBase == TB_STRUCT)
-        {
-            if (src->s != dst->s)
-                tkerr(crtTk, "a structure cannot be converted to another one");
-            return;
-        }
+        return;
     }
-    tkerr(crtTk, "incompatible types");
 }
 
-int canCast(Type *src, Type *dst)
-{
-    if (src->nElements > -1)
-    {
-        if (dst->nElements > -1)
-        {
-            if (src->typeBase != dst->typeBase)
-                return 0;
-        }
-        else
-        {
-            return 0;
-        }
-    }
-    else
-    {
-        if (dst->nElements > -1)
-        {
-            return 0;
-        }
+
+int canCast(Type *src, Type *dst) {
+    // Array rules
+    if (src->nElements > -1 || dst->nElements > -1) {
+        return (src->nElements > -1 && dst->nElements > -1 && src->typeBase == dst->typeBase);
     }
 
-    switch (src->typeBase)
-    {
+    // Primitive type casting rules
+    switch (src->typeBase) {
     case TB_CHAR:
     case TB_INT:
     case TB_DOUBLE:
-        switch (dst->typeBase)
-        {
+        switch (dst->typeBase) {
         case TB_CHAR:
         case TB_INT:
         case TB_DOUBLE:
             return 1;
+        default:
+            return 0;
         }
-        break;
 
     case TB_STRUCT:
-        if (dst->typeBase == TB_STRUCT)
-        {
-            return src->s == dst->s;
-        }
-        break;
-    }
+        return (dst->typeBase == TB_STRUCT && src->s == dst->s);
 
-    return 0;
+    default:
+        return 0;
+    }
 }
+

@@ -49,7 +49,10 @@ int getNextToken() {
                     addTk(AND);
                     return AND;
                 } else {
-                    tkerr(addTk(END), "invalid character: expected &&");
+                    pCrtCh++;
+                    addTk(AMP);
+                    return AMP;
+                    //tkerr(addTk(END), "invalid character: expected &&");
                 }
             } else if (ch == '|') {
                 if (*(pCrtCh + 1) == '|') {
@@ -296,7 +299,6 @@ int getNextToken() {
             if (*pCrtCh == '\'') {
                 pCrtCh++;
                 tk = addTk(CT_CHAR);
-                // You can extract value here if needed
                 return CT_CHAR;
             } else {
                 tkerr(addTk(END), "unterminated character constant");

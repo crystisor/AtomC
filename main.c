@@ -8,6 +8,7 @@ Token *tokens = NULL, *lastToken = NULL;
 const char *pCrtCh;
 char *input;
 Token *crtTk = NULL;
+Token *lookAhead;
 
 int main(int argc, char **argv)
 {
@@ -58,13 +59,14 @@ int main(int argc, char **argv)
         ;
 
     crtTk = tokens;
+    //lookAhead = getNextToken();
     showTokens();
     crtTk = tokens;
 
     int unitResult = unit();
     if (unitResult)
     {
-        printf("Syntax is valid.\n");
+        printf("\nSyntax is valid.\n");
     }
     else
     {

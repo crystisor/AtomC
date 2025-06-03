@@ -4,7 +4,7 @@
 #include "symbols.h"
 #include "utils.h"
 
-// Global variables
+
 Symbols symbols;
 int crtDepth = 0;
 
@@ -109,8 +109,7 @@ void deleteSymbolsAfter(Symbols *symbols, Symbol *start) {
         if (last == start)
             break;
         symbols->end--;
-        // Optionally, free symbol if you allocated dynamically:
-        // free(last);
+        free(last);
     }
 }
 
