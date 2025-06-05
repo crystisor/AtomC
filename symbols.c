@@ -110,7 +110,7 @@ void deleteSymbolsAfter(Symbols *symbols, Symbol *start) {
             break;
         symbols->end--;
         // Optionally, free symbol if you allocated dynamically:
-        // free(last);
+         free(last);
     }
 }
 
