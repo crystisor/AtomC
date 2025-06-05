@@ -1,3 +1,24 @@
+void  put_s(char str)
+{
+
+}
+
+void put_c(char c)
+{
+
+}
+
+void put_i(int i)
+{
+
+}
+
+int get_i()
+{
+	return 10;
+}
+
+
 void main()
 {
 	int		i,n,t;

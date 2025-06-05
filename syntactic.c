@@ -10,7 +10,6 @@ extern Token *crtTk;
 Token *consumedTk = NULL;
 extern Token *lookAhead;
 
-
 int isTypeName()
 {
     Token *start = crtTk;
@@ -80,12 +79,13 @@ int unit()
             if (!consume(ID))
                 tkerr(crtTk, "missing identifier");
 
-            if (lookAhead && lookAhead->code == LPAR) 
+            if (lookAhead && lookAhead->code == LPAR)
             {
                 crtTk = startTk;
                 if (!declFunc())
                     tkerr(crtTk, "invalid function declaration");
-            } else 
+            }
+            else
             {
                 crtTk = startTk;
                 if (!declVar())
@@ -105,7 +105,6 @@ int unit()
 
     return 1;
 }
-
 
 int declStruct()
 {
@@ -143,7 +142,7 @@ int declStruct()
 
 int declVar()
 {
-    //Type baseType;
+    // Type baseType;
     Type varType;
 
     if (!typeName(&varType))
@@ -153,12 +152,13 @@ int declVar()
         tkerr(crtTk, "missing variable name");
     Token *tkName = consumedTk;
 
-    //Type varType = baseType;
+    // Type varType = baseType;
     arrayDecl(&varType);
 
     addVar(tkName, &varType);
 
-    if (consume(ASSIGN)) {
+    if (consume(ASSIGN))
+    {
         RetVal rv;
         if (!expr(&rv))
             tkerr(crtTk, "invalid initializer");
@@ -167,12 +167,13 @@ int declVar()
             tkerr(crtTk, "cannot cast initializer to declared type");
     }
 
-    while (consume(COMMA)) {
+    while (consume(COMMA))
+    {
         if (!consume(ID))
             tkerr(crtTk, "missing variable name after ,");
         tkName = consumedTk;
 
-        //varType = baseType;  // RESET to base type
+        // varType = baseType;  // RESET to base type
         if (!arrayDecl(&varType))
             varType.nElements = -1;
 
@@ -184,7 +185,6 @@ int declVar()
 
     return 1;
 }
-
 
 int funcArg()
 {
@@ -277,7 +277,7 @@ int typeName(Type *ret)
     if (!typeBase(ret)) // Fill in base type (e.g., int, double, etc.)
         return 0;
 
-    ret->nPtr = 0; //init
+    ret->nPtr = 0;       // init
     while (consume(MUL)) // Consume '*' tokens
         ret->nPtr++;
     if (!arrayDecl(ret))
@@ -329,32 +329,27 @@ int typeBase(Type *ret)
 
 int arrayDecl(Type *ret)
 {
-    if (consume(LBRACKET))
-    {
+    if (consume(LBRACKET)) {
         RetVal rvSize;
         if (!expr(&rvSize))
-        {
             tkerr(crtTk, "invalid expression for array size");
-        }
-        if (rvSize.isCtVal == 0 || rvSize.type.typeBase != TB_INT || rvSize.type.nElements != -1)
-        {
+
+        if (!rvSize.isCtVal || rvSize.type.typeBase != TB_INT || rvSize.type.nElements != -1)
             tkerr(crtTk, "array size must be an integer constant scalar");
-        }
 
-        ret->nElements = rvSize.ctVal.i;
-
-        if (ret->nElements <= 0) {
+        if ((ret->nElements = rvSize.ctVal.i) <= 0)
             tkerr(crtTk, "array size must be positive");
-        }
 
         if (!consume(RBRACKET))
             tkerr(crtTk, "missing ] in array declaration");
+
         return 1;
     }
 
-    ret->nElements = -1; // No array declaration
+    ret->nElements = -1;
     return 0;
 }
+
 
 int expr(RetVal *rv)
 {
@@ -366,7 +361,7 @@ int exprAssign(RetVal *rv)
     Token *startTk = crtTk;
 
     RetVal rvl;
-    if (exprUnary(&rvl))
+    if (exprPostfix(&rvl))
     {
         if (consume(ASSIGN))
         {
@@ -470,6 +465,7 @@ int exprAdd(RetVal *rv)
     {
         if (!exprMul(&r2))
             tkerr(crtTk, "missing operand after + or -");
+        printf("\n%d %d\n", r1.type.nElements, r2.type.nElements);
         r1.type = getArithType(&r1.type, &r2.type);
         r1.isLVal = 0;
         r1.isCtVal = 0;
@@ -524,12 +520,13 @@ int exprCast(RetVal *rv)
         crtTk = startTk;
     }
 
-    return exprPrimary(rv); 
+    return exprPrimary(rv);
 }
 
 int exprUnary(RetVal *rv)
 {
-    if (consume(SUB)) {
+    if (consume(SUB))
+    {
         RetVal operand;
         if (!exprUnary(&operand))
             tkerr(crtTk, "missing operand after '-'");
@@ -542,11 +539,12 @@ int exprUnary(RetVal *rv)
         return 1;
     }
 
-    if (consume(NOT)) {
+    if (consume(NOT))
+    {
         RetVal operand;
         if (!exprUnary(&operand))
             tkerr(crtTk, "missing operand after '!'");
-        
+
         if (operand.type.typeBase != TB_INT)
             tkerr(crtTk, "invalid type for '!': expected int");
 
@@ -555,11 +553,12 @@ int exprUnary(RetVal *rv)
         return 1;
     }
 
-    if (consume(AND)) {
+    if (consume(AND))
+    {
         RetVal operand;
         if (!exprUnary(&operand))
             tkerr(crtTk, "missing operand after '&'");
-        
+
         if (!operand.isLVal)
             tkerr(crtTk, "cannot take address of rvalue");
 
@@ -572,7 +571,8 @@ int exprUnary(RetVal *rv)
         return 1;
     }
 
-    if (consume(MUL)) {
+    if (consume(MUL))
+    {
         RetVal operand;
         if (!exprUnary(&operand))
             tkerr(crtTk, "missing operand after '*'");
@@ -592,11 +592,11 @@ int exprUnary(RetVal *rv)
     return exprCast(rv);
 }
 
-
 int exprPostfix(RetVal *rv)
 {
     if (!exprPrimary(rv))
         return 0;
+
     while (1)
     {
         if (consume(LBRACKET))
@@ -604,31 +604,34 @@ int exprPostfix(RetVal *rv)
             RetVal idx;
             if (!expr(&idx))
                 tkerr(crtTk, "missing expression inside []");
+
             if (!consume(RBRACKET))
                 tkerr(crtTk, "missing ]");
+
             if (rv->type.nElements < 0)
                 tkerr(crtTk, "subscripted value is not an array");
-            rv->type.nElements = -1;
+
+            if (idx.type.nElements >= 0 || idx.type.typeBase == TB_STRUCT)
+                tkerr(crtTk, "array index must be scalar");
+
+            rv->type.nElements = -1; 
+
             rv->isLVal = 1;
             rv->isCtVal = 0;
-        }
-        else if (consume(DOT))
-        {
-            if (!consume(ID))
-                tkerr(crtTk, "missing field name after .");
+            return 1;
         }
         else
         {
             break;
         }
     }
+
     return 1;
 }
 
 int exprPrimary(RetVal *rv)
 {
     Token *startTk = crtTk;
-
     if (consume(ID))
     {
         Symbol *s = findSymbol(&symbols, consumedTk->text);
@@ -638,16 +641,26 @@ int exprPrimary(RetVal *rv)
         rv->isLVal = (s->cls == CLS_VAR);
         rv->isCtVal = 0;
 
-        if (consume(LPAR))
+        if (s->cls == CLS_FUNC && consume(LPAR))
         {
-            while (!consume(RPAR))
+            // Handle function arguments if needed
+            if (!consume(RPAR))
             {
-                RetVal arg;
-                if (!expr(&arg))
-                    tkerr(crtTk, "invalid argument");
-                consume(COMMA);
+                while (1)
+                {
+                    RetVal arg;
+                    if (!expr(&arg))
+                        tkerr(crtTk, "invalid argument");
+                    if (!consume(COMMA))
+                        break;
+                }
+                if (!consume(RPAR))
+                    tkerr(crtTk, "missing closing ) for function call");
             }
+
+            rv->isLVal = 0; // Function result is not an LVal
         }
+
         return 1;
     }
 

@@ -1,6 +1,6 @@
 int sum()
 {
-	int	 i,v[5],s;
+	int	 i,v[5],s,tmp;
 	s=0;
 	for(i=0;i<5;i=i+1){
 		v[i]=i;

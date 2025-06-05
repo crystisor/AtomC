@@ -11,6 +11,8 @@ Type createType(int typeBase, int nElements)
 
 Type getArithType(Type *s1, Type *s2)
 {
+    printf("DEBUG: s1->nElements = %d, s2->nElements = %d\n", s1->nElements, s2->nElements);
+
     if (s1->nElements >= 0 || s2->nElements >= 0)
         tkerr(crtTk, "cannot do arithmetic with arrays");
     if (s1->typeBase == TB_STRUCT || s2->typeBase == TB_STRUCT)
@@ -63,92 +65,92 @@ const char *typeToString(Type *t)
     return buf;
 }
 
-void cast(Type *dst, Type *src) {
+int typeEquals(Type *a, Type *b) {
+    return a->typeBase == b->typeBase &&
+           a->nElements == b->nElements;
+           //a->nPtr == b->nPtr;
+}
+
+void cast(Type *dst, Type *src)
+{
     // Ensure types match structurally; no semantic checks here
 
     // Check arrays must be same base type and both arrays
-    if (src->nElements > -1 || dst->nElements > -1) {
-        if (!(src->nElements > -1 && dst->nElements > -1 && src->typeBase == dst->typeBase)) {
+    if (src->nElements > -1 || dst->nElements > -1)
+    {
+        if (!(src->nElements > -1 && dst->nElements > -1 && src->typeBase == dst->typeBase))
+        {
             tkerr(crtTk, "invalid array cast");
         }
         return;
     }
 
     // For structs, only allow same struct type
-    if (src->typeBase == TB_STRUCT || dst->typeBase == TB_STRUCT) {
-        if (!(src->typeBase == TB_STRUCT && dst->typeBase == TB_STRUCT && src->s == dst->s)) {
+    if (src->typeBase == TB_STRUCT || dst->typeBase == TB_STRUCT)
+    {
+        if (!(src->typeBase == TB_STRUCT && dst->typeBase == TB_STRUCT && src->s == dst->s))
+        {
             tkerr(crtTk, "invalid struct cast");
         }
         return;
     }
 }
 
-
 int canCast(Type *src, Type *dst) {
-    if (src->nElements > -1 || dst->nElements > -1) {
-        if (src->nElements > -1 && dst->nElements > -1) {
-            return src->typeBase == dst->typeBase;
-        }
-        return 0;
+
+    if (typeEquals(src, dst)) return 1;
+
+    // 1. Array vs Scalar Mismatch: reject
+    if ((src->nElements >= 0 && dst->nElements == -1) ||
+        (src->nElements == -1 && dst->nElements >= 0)) {
+        return 0; // Can't cast between array and scalar
     }
+
+    // 2. Array to Array: must match base type and size
+    if (src->nElements >= 0 && dst->nElements >= 0) {
+        return src->typeBase == dst->typeBase &&
+               src->nElements == dst->nElements;
+    }
+
+    // 3. Pointer types
     if (src->nPtr || dst->nPtr) {
         if (src->nPtr && dst->nPtr) {
-            // Allow T* to T* (exact match)
-            if (src->typeBase == dst->typeBase) return 1;
-            // Allow T* to void*
-            if (dst->typeBase == TB_VOID) return 1;
-            // Allow void* to T*
-            if (src->typeBase == TB_VOID) return 1;
+            // Same base type, or one is void
+            return src->typeBase == dst->typeBase ||
+                   src->typeBase == TB_VOID ||
+                   dst->typeBase == TB_VOID;
         }
+        return 0; // Mismatch: one is pointer, the other is not
+    }
+
+    // 4. Structs: must match exactly
+    if (src->typeBase == TB_STRUCT || dst->typeBase == TB_STRUCT) {
+        return src->typeBase == TB_STRUCT &&
+               dst->typeBase == TB_STRUCT &&
+               src->s == dst->s;
+    }
+
+    // 5. Void is not castable
+    if (src->typeBase == TB_VOID || dst->typeBase == TB_VOID) {
         return 0;
     }
 
-
+    // 6. Scalar types: allow standard numeric conversions
     switch (src->typeBase) {
-    case TB_CHAR:
-    case TB_INT:
-        switch (dst->typeBase) {
         case TB_CHAR:
         case TB_INT:
         case TB_FLOAT:
         case TB_DOUBLE:
-            return 1;
-        default:
-            return 0;
-        }
-
-    case TB_FLOAT:
-        switch (dst->typeBase) {
-        case TB_CHAR:
-        case TB_INT:
-            return 1;
-        case TB_FLOAT:
-        case TB_DOUBLE:
-            return 1;
-        default:
-            return 0;
-        }
-
-    case TB_DOUBLE:
-        switch (dst->typeBase) {
-        case TB_CHAR:
-        case TB_INT:
-        case TB_FLOAT:
-            return 1;
-        case TB_DOUBLE:
-            return 1;
-        default:
-            return 0;
-        }
-
-    case TB_STRUCT:
-        return (dst->typeBase == TB_STRUCT && src->s == dst->s);
-
-    case TB_VOID:
-        return 0;
-
-    default:
-        return 0;
+            switch (dst->typeBase) {
+                case TB_CHAR:
+                case TB_INT:
+                case TB_FLOAT:
+                case TB_DOUBLE:
+                    return 1;
+            }
+            break;
     }
+
+    return 0;
 }
 

@@ -13,7 +13,6 @@ Token *lookAhead;
 int main(int argc, char **argv)
 {
     initSymbols(&symbols);
-    printf("Symbols initialized: begin=%p, end=%p, after=%p\n", symbols.begin, symbols.end, symbols.after);
     if (argc != 2)
     {
         fprintf(stderr, "Usage: %s <source-file>\n", argv[0]);
